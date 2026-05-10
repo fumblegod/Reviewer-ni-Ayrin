@@ -43,13 +43,15 @@ const MICRO_QUICK_REF = [
   { organism: "Ascaris lumbricoides", type: "🪱", key: "Largest intestinal roundworm. Fecal-oral. Tx: albendazole or mebendazole." },
 ];
 
-function generatePrompt(topic, difficulty, previousQuestions, subtopic, customTopic) {
+function generatePrompt(topic, difficulty, previousQuestions, subtopic, customTopic, customContext = "") {
   const topicLabel = TOPICS.find((t) => t.id === topic)?.label || topic;
   const focus = customTopic ? `specifically about: ${customTopic}` : `about ${topicLabel}`;
   
   const avoid = previousQuestions.length > 0
     ? `Do not repeat these questions: ${previousQuestions.slice(-5).join(" | ")}`
     : "";
+
+  const reference = customContext ? `\nIMPORTANT REFERENCE MATERIAL:\n"""\n${customContext}\n"""\nBase your question off the reference material provided above, prioritizing the concepts and details within it.` : "";
 
   let instructions = `You are an expert nursing educator creating ${difficulty} exam questions.
 Generate ONE multiple-choice nursing question ${focus}.`;
@@ -70,6 +72,7 @@ Include the organism name and relevant clinical details. Make it clinically real
   }
 
   return `${instructions}
+${reference}
 ${avoid}
 
 Respond ONLY with valid JSON, no markdown, no code fences, no explanation:
@@ -83,15 +86,18 @@ Respond ONLY with valid JSON, no markdown, no code fences, no explanation:
 }`;
 }
 
-function generateFlashcardPrompt(topic, difficulty, previousCards, customTopic) {
+function generateFlashcardPrompt(topic, difficulty, previousCards, customTopic, customContext = "") {
   const topicLabel = TOPICS.find((t) => t.id === topic)?.label || topic;
   const focus = customTopic ? `focusing mainly on: ${customTopic}` : `about ${topicLabel}`;
   const avoid = previousCards.length > 0
     ? `Do not repeat these concepts: ${previousCards.slice(-5).join(" | ")}`
     : "";
+  
+  const reference = customContext ? `\nIMPORTANT REFERENCE MATERIAL:\n"""\n${customContext}\n"""\nBase your flashcard on the concepts and details provided in the reference material above.` : "";
 
   return `You are an expert nursing educator creating ${difficulty} flashcards.
 Generate ONE flashcard ${focus}. Make the front concise and the back informative.
+${reference}
 ${avoid}
 
 Respond ONLY with valid JSON, no markdown, no code fences, no explanation:
@@ -261,19 +267,23 @@ function QuizPanel({ topic, difficulty, progress, onAnswer }) {
   const [error, setError] = useState(null);
   const [subtopic, setSubtopic] = useState("all");
   const [customTopic, setCustomTopic] = useState("");
+  const [customContext, setCustomContext] = useState("");
   const [inputVal, setInputVal] = useState("");
+  const [contextVal, setContextVal] = useState("");
+  const [showContextInput, setShowContextInput] = useState(false);
   const [showCheatSheet, setShowCheatSheet] = useState(false);
   const prevQuestions = useRef([]);
   const isMicro = topic === "micropara";
 
-  const loadQuestion = async (overrideTopic) => {
+  const loadQuestion = async (overrideTopic, overrideContext) => {
     setLoading(true);
     setSelected(null);
     setRevealed(false);
     setError(null);
     try {
       const topicToUse = typeof overrideTopic === "string" ? overrideTopic : customTopic;
-      const prompt = generatePrompt(topic, difficulty, prevQuestions.current, subtopic, topicToUse);
+      const contextToUse = typeof overrideContext === "string" ? overrideContext : customContext;
+      const prompt = generatePrompt(topic, difficulty, prevQuestions.current, subtopic, topicToUse, contextToUse);
       const q = await fetchFromAI(prompt);
       setQuestion(q);
       prevQuestions.current.push(q.question.slice(0, 60));
@@ -285,22 +295,26 @@ function QuizPanel({ topic, difficulty, progress, onAnswer }) {
 
   useEffect(() => {
     prevQuestions.current = [];
-    loadQuestion(customTopic);
+    loadQuestion(customTopic, customContext);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic, subtopic]);
 
   const handleCustomTopicSubmit = (e) => {
     e.preventDefault();
     setCustomTopic(inputVal);
+    setCustomContext(contextVal);
     prevQuestions.current = [];
-    loadQuestion(inputVal);
+    loadQuestion(inputVal, contextVal);
   };
 
   const handleClearCustom = () => {
     setCustomTopic("");
+    setCustomContext("");
     setInputVal("");
+    setContextVal("");
+    setShowContextInput(false);
     prevQuestions.current = [];
-    loadQuestion("");
+    loadQuestion("", "");
   };
 
   const stats = progress[topic] || { correct: 0, total: 0 };
@@ -360,17 +374,28 @@ function QuizPanel({ topic, difficulty, progress, onAnswer }) {
 
       {/* Custom Topic Focus */}
       {!showCheatSheet && (
-        <form onSubmit={handleCustomTopicSubmit} style={{ display: "flex", gap: 8, marginTop: 4 }}>
-          <input 
-            type="text" 
-            value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            placeholder="Focus on a specific type or concept (e.g., 'ethics', 'side effects')"
-            style={{ flex: 1, background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #1e293b", borderRadius: 4, padding: "6px 12px", fontSize: 12, outline: "none", fontFamily: "inherit" }}
-          />
-          <button type="submit" style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #3b82f6", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>FOCUS</button>
-          {customTopic && (
-            <button type="button" onClick={handleClearCustom} style={{ background: "transparent", color: "#f87171", border: "1px solid #7f1d1d", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>CLEAR</button>
+        <form onSubmit={handleCustomTopicSubmit} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input 
+              type="text" 
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              placeholder="Focus on a specific type or concept (e.g., 'ethics', 'side effects')"
+              style={{ flex: 1, background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #1e293b", borderRadius: 4, padding: "6px 12px", fontSize: 12, outline: "none", fontFamily: "inherit" }}
+            />
+            <button type="button" onClick={() => setShowContextInput(!showContextInput)} style={{ background: showContextInput ? "#1e3a5f" : "#0a0f1a", color: "#93c5fd", border: "1px solid #3b82f6", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>+ DOCUMENT</button>
+            <button type="submit" style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #3b82f6", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>FOCUS</button>
+            {(customTopic || customContext) && (
+              <button type="button" onClick={handleClearCustom} style={{ background: "transparent", color: "#f87171", border: "1px solid #7f1d1d", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>CLEAR</button>
+            )}
+          </div>
+          {showContextInput && (
+            <textarea
+              value={contextVal}
+              onChange={(e) => setContextVal(e.target.value)}
+              placeholder="Paste text from a PDF, document, or lecture notes here. The AI will use this as reference material to generate your question..."
+              style={{ width: "100%", height: 100, background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #1e293b", borderRadius: 4, padding: "8px 12px", fontSize: 12, outline: "none", fontFamily: "inherit", resize: "vertical" }}
+            />
           )}
         </form>
       )}
@@ -446,17 +471,21 @@ function FlashcardPanel({ topic, difficulty }) {
   const [loading, setLoading] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [customTopic, setCustomTopic] = useState("");
+  const [customContext, setCustomContext] = useState("");
   const [inputVal, setInputVal] = useState("");
+  const [contextVal, setContextVal] = useState("");
+  const [showContextInput, setShowContextInput] = useState(false);
   const [error, setError] = useState(null);
   const prevCards = useRef([]);
 
-  const loadCard = async (overrideTopic) => {
+  const loadCard = async (overrideTopic, overrideContext) => {
     setLoading(true);
     setFlipped(false);
     setError(null);
     try {
       const topicToUse = typeof overrideTopic === "string" ? overrideTopic : customTopic;
-      const prompt = generateFlashcardPrompt(topic, difficulty, prevCards.current, topicToUse);
+      const contextToUse = typeof overrideContext === "string" ? overrideContext : customContext;
+      const prompt = generateFlashcardPrompt(topic, difficulty, prevCards.current, topicToUse, contextToUse);
       const data = await fetchFromAI(prompt);
       setCard(data);
       prevCards.current.push(data.front.slice(0, 60));
@@ -468,22 +497,26 @@ function FlashcardPanel({ topic, difficulty }) {
 
   useEffect(() => {
     prevCards.current = [];
-    loadCard(customTopic);
+    loadCard(customTopic, customContext);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic, difficulty]);
 
   const handleCustomTopicSubmit = (e) => {
     e.preventDefault();
     setCustomTopic(inputVal);
+    setCustomContext(contextVal);
     prevCards.current = [];
-    loadCard(inputVal);
+    loadCard(inputVal, contextVal);
   };
 
   const handleClearCustom = () => {
     setCustomTopic("");
+    setCustomContext("");
     setInputVal("");
+    setContextVal("");
+    setShowContextInput(false);
     prevCards.current = [];
-    loadCard("");
+    loadCard("", "");
   };
 
   return (
@@ -495,17 +528,28 @@ function FlashcardPanel({ topic, difficulty }) {
       </div>
 
       {/* Custom Topic Focus */}
-      <form onSubmit={handleCustomTopicSubmit} style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        <input 
-          type="text" 
-          value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
-          placeholder="Focus flashcards on a specific concept (e.g., 'side effects', 'lab values')"
-          style={{ flex: 1, background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #1e293b", borderRadius: 4, padding: "6px 12px", fontSize: 12, outline: "none", fontFamily: "inherit" }}
-        />
-        <button type="submit" style={{ background: "#7c3aed", color: "#ddd6fe", border: "1px solid #8b5cf6", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>FOCUS</button>
-        {customTopic && (
-          <button type="button" onClick={handleClearCustom} style={{ background: "transparent", color: "#f87171", border: "1px solid #7f1d1d", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>CLEAR</button>
+      <form onSubmit={handleCustomTopicSubmit} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input 
+            type="text" 
+            value={inputVal}
+            onChange={(e) => setInputVal(e.target.value)}
+            placeholder="Focus flashcards on a specific concept (e.g., 'side effects', 'lab values')"
+            style={{ flex: 1, background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #1e293b", borderRadius: 4, padding: "6px 12px", fontSize: 12, outline: "none", fontFamily: "inherit" }}
+          />
+          <button type="button" onClick={() => setShowContextInput(!showContextInput)} style={{ background: showContextInput ? "#4c1d95" : "#0a0f1a", color: "#ddd6fe", border: "1px solid #8b5cf6", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>+ DOCUMENT</button>
+          <button type="submit" style={{ background: "#7c3aed", color: "#ddd6fe", border: "1px solid #8b5cf6", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>FOCUS</button>
+          {(customTopic || customContext) && (
+            <button type="button" onClick={handleClearCustom} style={{ background: "transparent", color: "#f87171", border: "1px solid #7f1d1d", borderRadius: 4, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>CLEAR</button>
+          )}
+        </div>
+        {showContextInput && (
+          <textarea
+            value={contextVal}
+            onChange={(e) => setContextVal(e.target.value)}
+            placeholder="Paste text from a PDF, document, or lecture notes here. The AI will use this as reference material to generate your flashcard..."
+            style={{ width: "100%", height: 100, background: "#0a0f1a", color: "#e2e8f0", border: "1px solid #1e293b", borderRadius: 4, padding: "8px 12px", fontSize: 12, outline: "none", fontFamily: "inherit", resize: "vertical" }}
+          />
         )}
       </form>
 
