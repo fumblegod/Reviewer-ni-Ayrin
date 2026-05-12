@@ -1,0 +1,15 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model QuizProgress {
+  id        String   @id
+  progress  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,7 +1,7 @@
 # 🦠 NURSEiq — AI Nursing Study Platform
 
-A free AI-powered nursing review app built with Next.js and Google Gemini.
-Features quizzes, notes, progress tracking, and a dedicated MicroPara mode.
+A free AI-powered nursing review app built with Next.js and Groq.
+Features quizzes, notes, database-backed progress tracking, and a dedicated MicroPara mode.
 
 ---
 
@@ -10,22 +10,23 @@ Features quizzes, notes, progress tracking, and a dedicated MicroPara mode.
 ### 1. Install Node.js
 Download from https://nodejs.org (choose the LTS version)
 
-### 2. Get your FREE Gemini API Key
-1. Go to https://aistudio.google.com
-2. Sign in with a Google account
-3. Click **"Get API Key"** → **"Create API key"**
-4. Copy the key
+### 2. Get your FREE Groq API Key
+1. Go to https://console.groq.com
+2. Sign in and create an API key
+3. Copy the key
 
-### 3. Add your API key
-Open the file `.env.local` and replace `paste_your_key_here`:
+### 3. Add your API key and database URL
+Open the file `.env.local` and replace the placeholders:
 ```
-GEMINI_API_KEY=AIzaSy...your_actual_key_here
+GROQ_API_KEY=gsk_...
+DATABASE_URL="file:./dev.db"
 ```
 
-### 4. Install and run
+### 4. Install, create the database, and run
 Open a terminal in this folder and run:
 ```bash
 npm install
+npm run db:push
 npm run dev
 ```
 
@@ -47,8 +48,9 @@ Then open http://localhost:3000 in your browser. Done! ✅
 
 ### 3. Add your API key to Vercel
 1. In your Vercel project → **Settings** → **Environment Variables**
-2. Add: `GEMINI_API_KEY` = your key from step above
-3. Click **Save** → then **Redeploy**
+2. Add: `GROQ_API_KEY` = your key from step above
+3. Add: `DATABASE_URL` = your database connection string
+4. Click **Save** → then **Redeploy**
 
 Your app will be live at `https://nurseiq.vercel.app` (or similar) 🎉
 
@@ -59,11 +61,16 @@ Your app will be live at `https://nurseiq.vercel.app` (or similar) 🎉
 ```
 nurseiq/
 ├── app/
-│   ├── api/question/route.js   ← Gemini API call (server-side, key is safe here)
+│   ├── api/progress/route.js   ← Saves and loads quiz progress
+│   ├── api/question/route.js   ← Groq API call (server-side, key is safe here)
 │   ├── layout.js
 │   └── page.js
 ├── components/
 │   └── NurseIQ.jsx             ← Full frontend app
+├── lib/
+│   └── prisma.js               ← Shared Prisma client
+├── prisma/
+│   └── schema.prisma           ← Quiz progress table
 ├── .env.local                  ← Your API key (never commit this!)
 ├── .env.example                ← Safe template to share
 ├── .gitignore                  ← Keeps .env.local out of git
@@ -87,4 +94,4 @@ nurseiq/
 
 ## 💰 Cost
 - **Hosting**: FREE (Vercel free tier)
-- **API**: FREE (Gemini 1.5 Flash free tier — generous limits, no credit card needed)
+- **API**: FREE tier available through Groq, depending on your account and usage

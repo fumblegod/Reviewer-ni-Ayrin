@@ -243,6 +243,49 @@ async function fetchFromAI(prompt) {
   return data;
 }
 
+const PROGRESS_USER_KEY = "nurseiq_progress_user";
+
+function getOrCreateProgressUserId() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const saved = localStorage.getItem(PROGRESS_USER_KEY);
+    if (saved) return saved;
+
+    const next = crypto.randomUUID();
+    localStorage.setItem(PROGRESS_USER_KEY, next);
+    return next;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+async function loadQuizProgress(userId) {
+  const res = await fetch(`/api/progress?userId=${encodeURIComponent(userId)}`);
+  const data = await res.json();
+
+  if (!res.ok || data.error) {
+    throw new Error(data.error || "Could not load saved quiz progress.");
+  }
+
+  return data.progress || {};
+}
+
+async function saveQuizProgress(userId, progress) {
+  const res = await fetch("/api/progress", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, progress }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || "Could not save quiz progress.");
+  }
+
+  return data;
+}
+
 // ── Sparkline ─────────────────────────────────────────────────────
 function Sparkline({ data, color }) {
   if (!data || data.length < 2) return null;
@@ -744,6 +787,10 @@ export default function NurseIQ() {
   const [notes, setNotes] = useState({});
   const [progress, setProgress] = useState({});
   const [savedMsg, setSavedMsg] = useState(false);
+  const [progressReady, setProgressReady] = useState(false);
+  const [progressUserId, setProgressUserId] = useState(null);
+  const progressMessageTimerRef = useRef(null);
+  const hasSyncedProgressRef = useRef(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("nurseiq_theme");
@@ -764,6 +811,75 @@ export default function NurseIQ() {
     return () => media.removeEventListener("change", sync);
   }, []);
 
+  useEffect(() => {
+    const userId = getOrCreateProgressUserId();
+    if (!userId) {
+      setProgressReady(true);
+      return;
+    }
+
+    setProgressUserId(userId);
+    let cancelled = false;
+
+    const syncProgress = async () => {
+      try {
+        const savedProgress = await loadQuizProgress(userId);
+        if (!cancelled) {
+          setProgress(savedProgress);
+        }
+      } catch {
+        // Keep the local in-memory state if the database is unavailable.
+      } finally {
+        if (!cancelled) {
+          setProgressReady(true);
+        }
+      }
+    };
+
+    syncProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!progressReady || !progressUserId) return;
+
+    let cancelled = false;
+
+    const syncProgress = async () => {
+      try {
+        await saveQuizProgress(progressUserId, progress);
+        if (!cancelled) {
+          if (hasSyncedProgressRef.current) {
+            setSavedMsg(true);
+            if (progressMessageTimerRef.current) {
+              clearTimeout(progressMessageTimerRef.current);
+            }
+            progressMessageTimerRef.current = setTimeout(() => setSavedMsg(false), 1500);
+          } else {
+            hasSyncedProgressRef.current = true;
+          }
+        }
+      } catch {
+        // Saving progress is best-effort; quiz state stays usable even if the database is down.
+      }
+    };
+
+    syncProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [progress, progressReady, progressUserId]);
+
+  useEffect(() => () => {
+    if (progressMessageTimerRef.current) {
+      clearTimeout(progressMessageTimerRef.current);
+    }
+  }, []);
+
   const handleAnswer = (topic, correct) => {
     setProgress((prev) => {
       const cur = prev[topic] || { correct: 0, total: 0, history: [] };
@@ -774,7 +890,10 @@ export default function NurseIQ() {
   const handleSaveNote = (topic, text) => {
     setNotes((prev) => ({ ...prev, [topic]: text }));
     setSavedMsg(true);
-    setTimeout(() => setSavedMsg(false), 1500);
+    if (progressMessageTimerRef.current) {
+      clearTimeout(progressMessageTimerRef.current);
+    }
+    progressMessageTimerRef.current = setTimeout(() => setSavedMsg(false), 1500);
   };
 
   const colors = THEME_COLORS[theme] || THEME_COLORS.classic;
