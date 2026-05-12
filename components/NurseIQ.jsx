@@ -25,6 +25,12 @@ const MICROPARA_SUBTOPICS = [
 
 const DIFFICULTY = ["NCLEX-RN", "NCLEX-PN", "Advanced Practice"];
 
+const THEMES = [
+  { id: "classic", label: "Classic", filter: "none" },
+  { id: "ocean", label: "Ocean", filter: "hue-rotate(34deg) saturate(1.1)" },
+  { id: "sunset", label: "Sunset", filter: "hue-rotate(-28deg) saturate(1.12)" },
+];
+
 const MICRO_QUICK_REF = [
   { organism: "S. aureus", type: "🧫", key: "Gram+ cocci clusters. MRSA → vancomycin. Toxin-mediated: TSS, scalded skin, food poisoning." },
   { organism: "S. pneumoniae", type: "🧫", key: "Gram+ diplococci. Leading cause of CAP, meningitis, otitis media. Tx: penicillin (or ceftriaxone if resistant)." },
@@ -175,7 +181,7 @@ function NotesPanel({ topic, notes, onSave }) {
   const [text, setText] = useState(notes[topic] || "");
   useEffect(() => setText(notes[topic] || ""), [topic, notes]);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "calc(100vh - 180px)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "min(60vh, calc(100vh - 220px))" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 11, fontFamily: "monospace", color: "#64748b", letterSpacing: 2, textTransform: "uppercase" }}>
           Notes — {TOPICS.find((t) => t.id === topic)?.label}
@@ -605,9 +611,30 @@ export default function NurseIQ() {
   const [activeTopic, setActiveTopic] = useState("micropara");
   const [activeTab, setActiveTab] = useState("quiz");
   const [difficulty, setDifficulty] = useState("NCLEX-RN");
+  const [theme, setTheme] = useState("classic");
+  const [isMobile, setIsMobile] = useState(false);
   const [notes, setNotes] = useState({});
   const [progress, setProgress] = useState({});
   const [savedMsg, setSavedMsg] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("nurseiq_theme");
+    if (savedTheme && THEMES.some((t) => t.id === savedTheme)) {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("nurseiq_theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 900px)");
+    const sync = (e) => setIsMobile(e.matches);
+    sync(media);
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   const handleAnswer = (topic, correct) => {
     setProgress((prev) => {
@@ -622,6 +649,8 @@ export default function NurseIQ() {
     setTimeout(() => setSavedMsg(false), 1500);
   };
 
+  const activeTheme = THEMES.find((t) => t.id === theme) || THEMES[0];
+
   return (
     <div style={{ minHeight: "100vh", background: "#060b14", color: "#e2e8f0", fontFamily: "Georgia, serif", display: "flex", flexDirection: "column" }}>
       <style>{`
@@ -634,12 +663,33 @@ export default function NurseIQ() {
       `}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e293b", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", padding: isMobile ? "12px 14px" : "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 210 }}>
           <span style={{ fontFamily: "monospace", fontSize: 11, color: "#4ade80", letterSpacing: 4 }}>NURSEiq</span>
           <span style={{ fontSize: 10, color: "#334155", fontFamily: "monospace" }}>AI Study Platform</span>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ fontFamily: "monospace", fontSize: 10, color: "#64748b", letterSpacing: 1 }}>THEME</span>
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              style={{
+                background: "#0a0f1a",
+                color: "#cbd5e1",
+                border: "1px solid #1e293b",
+                borderRadius: 4,
+                padding: "4px 8px",
+                fontSize: 11,
+                fontFamily: "monospace",
+                outline: "none",
+              }}
+            >
+              {THEMES.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </div>
           {DIFFICULTY.map((d) => (
             <button key={d} onClick={() => setDifficulty(d)} style={{
               background: difficulty === d ? "#4ade80" : "transparent",
@@ -652,9 +702,9 @@ export default function NurseIQ() {
         </div>
       </div>
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flex: 1, overflow: "hidden", filter: activeTheme.filter, transition: "filter .25s ease" }}>
         {/* Sidebar */}
-        <div style={{ width: 210, borderRight: "1px solid #1e293b", padding: "16px 0", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
+        <div style={{ width: isMobile ? "100%" : 210, borderRight: isMobile ? "none" : "1px solid #1e293b", borderBottom: isMobile ? "1px solid #1e293b" : "none", padding: isMobile ? "10px 8px" : "16px 0", display: "flex", flexDirection: isMobile ? "row" : "column", gap: 2, overflowY: isMobile ? "hidden" : "auto", overflowX: isMobile ? "auto" : "hidden" }}>
           {TOPICS.map((t) => {
             const stats = progress[t.id];
             const pct = stats?.total ? Math.round((stats.correct / stats.total) * 100) : null;
@@ -663,8 +713,10 @@ export default function NurseIQ() {
                 background: activeTopic === t.id ? "#0f172a" : "transparent",
                 borderLeft: activeTopic === t.id ? "2px solid #4ade80" : t.featured ? "2px solid #3b82f6" : "2px solid transparent",
                 border: "none", color: activeTopic === t.id ? "#e2e8f0" : t.featured ? "#93c5fd" : "#64748b",
-                padding: "10px 16px", textAlign: "left", cursor: "pointer",
+                padding: isMobile ? "9px 12px" : "10px 16px", textAlign: "left", cursor: "pointer",
                 fontFamily: "inherit", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all .15s",
+                minWidth: isMobile ? 180 : "auto",
+                borderRadius: isMobile ? 6 : 0,
               }}>
                 <span>{t.icon} {t.label}</span>
                 {pct !== null && (
@@ -678,7 +730,7 @@ export default function NurseIQ() {
         {/* Main */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Tabs */}
-          <div style={{ display: "flex", borderBottom: "1px solid #1e293b", padding: "0 24px" }}>
+          <div style={{ display: "flex", borderBottom: "1px solid #1e293b", padding: isMobile ? "0 8px" : "0 24px", overflowX: "auto", whiteSpace: "nowrap" }}>
             {["quiz", "flashcards", "notes", "progress"].map((tab) => (
               <button key={tab} onClick={() => setActiveTab(tab)} style={{
                 background: "none", border: "none",
@@ -694,7 +746,7 @@ export default function NurseIQ() {
           </div>
 
           {/* Panel */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 14 : 24 }}>
             {activeTab === "quiz" && <QuizPanel key={activeTopic} topic={activeTopic} difficulty={difficulty} progress={progress} onAnswer={handleAnswer} />}
             {activeTab === "flashcards" && <FlashcardPanel key={`fc-${activeTopic}`} topic={activeTopic} difficulty={difficulty} />}
             {activeTab === "notes" && <NotesPanel topic={activeTopic} notes={notes} onSave={handleSaveNote} />}
